@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: qr-order-api
+
+  # JPA — Flyway handles schema; JPA only validates
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+
+  # Flyway
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # PostgreSQL datasource
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:qrorder}
+    username: ${DB_USER:qrorder}
+    password: ${DB_PASS:qrorder}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 2
+
+  # Virtual threads (Java 21)
+  threads:
+    virtual:
+      enabled: true
+
+  # Jackson
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: true
+
+# Security — JWT
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-this-is-only-for-dev}
+    expiration-ms: ${JWT_EXPIRATION:3600000}   # 1 hour
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION:86400000}  # 24 hours
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# Server
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# Logging
+logging:
+  level:
+    com.qrorder: DEBUG
+    org.springframework.security: INFO
+    org.flywaydb: INFO
