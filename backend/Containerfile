@@ -1,0 +1,26 @@
+# Stage 1: Build stage
+FROM docker.io/library/eclipse-temurin:21-jdk-alpine AS builder
+WORKDIR /workspace
+
+# Copy maven wrapper & pom
+COPY pom.xml .
+# Download dependencies
+RUN apk add --no-cache maven && mvn dependency:go-offline -B
+
+# Copy sources and compile
+COPY src src
+RUN mvn clean package -DskipTests
+
+# Stage 2: Runtime stage (minimal & secure)
+FROM docker.io/library/eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# Run as non-root user for security (OWASP ASVS)
+RUN addgroup -S qrorder && adduser -S qrorder -G qrorder
+USER qrorder:qrorder
+
+COPY --from=builder /workspace/target/*.jar app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
