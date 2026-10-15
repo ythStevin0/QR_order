@@ -66,6 +66,8 @@ server:
 
 # Logging
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
   level:
     com.qrorder: DEBUG
     org.springframework.security: INFO
