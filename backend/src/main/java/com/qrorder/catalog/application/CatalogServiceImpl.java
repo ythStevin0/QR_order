@@ -56,6 +56,13 @@ public class CatalogServiceImpl implements CatalogService {
         return TableContextResponse.from(outlet, table);
     }
 
+    @Override
+    public TableContextResponse getOutletContext(Long outletId) {
+        log.info("Fetching outlet context for outletId={}", outletId);
+        Outlet outlet = ensureOutletExists(outletId);
+        return TableContextResponse.from(outlet, null);
+    }
+
     private Outlet ensureOutletExists(Long outletId) {
         return outletRepository.findById(outletId)
                 .orElseThrow(() -> new ResourceNotFoundException("Outlet not found with id: " + outletId));

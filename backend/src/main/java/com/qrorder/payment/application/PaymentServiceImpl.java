@@ -2,9 +2,9 @@ package com.qrorder.payment.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.qrorder.ordering.domain.Order;
-import com.qrorder.ordering.domain.OrderStatus;
+import com.qrorder.ordering.domain.*;
 import com.qrorder.ordering.domain.event.OrderPaidEvent;
+import com.qrorder.ordering.infrastructure.DailyCounterRepository;
 import com.qrorder.ordering.infrastructure.OrderRepository;
 import com.qrorder.payment.api.dto.CreatePaymentRequest;
 import com.qrorder.payment.api.dto.PaymentResponse;
@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,17 +38,20 @@ public class PaymentServiceImpl implements PaymentService {
     private final OutboxEventRepository outboxEventRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final DailyCounterRepository dailyCounterRepository;
 
     public PaymentServiceImpl(PaymentRepository paymentRepository,
                               OrderRepository orderRepository,
                               OutboxEventRepository outboxEventRepository,
                               ApplicationEventPublisher eventPublisher,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              DailyCounterRepository dailyCounterRepository) {
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
+        this.dailyCounterRepository = dailyCounterRepository;
     }
 
     @Override
@@ -105,6 +109,17 @@ public class PaymentServiceImpl implements PaymentService {
         if (status.equals("settlement") || status.equals("capture") || status.equals("paid")) {
             payment.markPaid("{\"rawStatus\":\"" + status + "\"}");
             order.transitionTo(OrderStatus.PAID, "SYSTEM_WEBHOOK");
+
+            // Assign queue number for TAKE_AWAY orders upon payment (ALUR_SISTEM.md Line 144)
+            if (order.getOrderType() == OrderType.TAKE_AWAY && order.getQueueNumber() == null) {
+                LocalDate today = LocalDate.now();
+                DailyCounter counter = dailyCounterRepository.findByOutletIdAndCounterDateWithLock(order.getOutlet().getId(), today)
+                        .orElseGet(() -> dailyCounterRepository.save(new DailyCounter(order.getOutlet().getId(), today)));
+                int queueNumber = counter.incrementAndGet();
+                dailyCounterRepository.save(counter);
+                order.setQueueNumber(queueNumber);
+                log.info("Assigned takeaway queue number {} to orderId={}", queueNumber, order.getId());
+            }
 
             paymentRepository.save(payment);
             orderRepository.save(order);

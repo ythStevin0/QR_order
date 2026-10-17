@@ -19,6 +19,12 @@ public class CatalogController {
         this.catalogService = catalogService;
     }
 
+    @GetMapping
+    public ResponseEntity<WebResponse<TableContextResponse>> getOutletContext(@PathVariable Long outletId) {
+        TableContextResponse context = catalogService.getOutletContext(outletId);
+        return ResponseEntity.ok(WebResponse.success(context));
+    }
+
     @GetMapping("/menu")
     public ResponseEntity<WebResponse<List<MenuItemResponse>>> getActiveMenu(@PathVariable Long outletId) {
         List<MenuItemResponse> menu = catalogService.getActiveMenu(outletId);

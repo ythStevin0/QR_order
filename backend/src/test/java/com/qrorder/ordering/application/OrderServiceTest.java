@@ -54,9 +54,6 @@ class OrderServiceTest {
     private OutletRepository outletRepository;
 
     @Mock
-    private DailyCounterRepository dailyCounterRepository;
-
-    @Mock
     private IdempotencyKeyRepository idempotencyKeyRepository;
 
     @Spy
@@ -117,15 +114,11 @@ class OrderServiceTest {
     }
 
     @Test
-    @DisplayName("createOrder: Successfully creates TAKE_AWAY order with queue number increment")
+    @DisplayName("createOrder: Successfully creates TAKE_AWAY order (queue number assigned upon payment)")
     void createTakeAwayOrderSuccess() {
         when(outletRepository.findById(1L)).thenReturn(Optional.of(outlet));
         when(menuItemRepository.findById(1L)).thenReturn(Optional.of(menuItem));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        DailyCounter counter = new DailyCounter(1L, LocalDate.now());
-        when(dailyCounterRepository.findByOutletIdAndCounterDateWithLock(eq(1L), any(LocalDate.class)))
-                .thenReturn(Optional.of(counter));
 
         CreateOrderRequest request = new CreateOrderRequest(
                 1L,
@@ -141,10 +134,8 @@ class OrderServiceTest {
         assertNotNull(response);
         assertEquals(OrderType.TAKE_AWAY, response.orderType());
         assertEquals("Budi", response.customerName());
-        assertEquals(1, response.queueNumber());
+        assertNull(response.queueNumber(), "Queue number must be null until payment is confirmed");
         assertNull(response.tableNumber());
-
-        verify(dailyCounterRepository, times(1)).save(counter);
     }
 
     @Test
