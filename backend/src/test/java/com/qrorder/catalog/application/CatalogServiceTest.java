@@ -102,4 +102,19 @@ class CatalogServiceTest {
 
         assertThrows(ResourceNotFoundException.class, () -> catalogService.getTableContext(1L, "99"));
     }
+
+    @Test
+    @DisplayName("getOutletContext: Successfully returns outlet context without table")
+    void getOutletContextSuccess() {
+        when(outletRepository.findById(1L)).thenReturn(Optional.of(outlet));
+
+        TableContextResponse response = catalogService.getOutletContext(1L);
+
+        assertNotNull(response);
+        assertEquals(1L, response.outletId());
+        assertEquals("Outlet Utama", response.outletName());
+        assertNull(response.tableNumber());
+        assertFalse(response.tableIsActive());
+        assertTrue(response.outletIsOpen());
+    }
 }

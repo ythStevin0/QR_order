@@ -10,7 +10,6 @@ import com.qrorder.ordering.api.dto.CreateOrderRequest;
 import com.qrorder.ordering.api.dto.OrderItemRequest;
 import com.qrorder.ordering.api.dto.OrderResponse;
 import com.qrorder.ordering.domain.*;
-import com.qrorder.ordering.infrastructure.DailyCounterRepository;
 import com.qrorder.ordering.infrastructure.OrderRepository;
 import com.qrorder.outlet.domain.Outlet;
 import com.qrorder.outlet.infrastructure.OutletRepository;
@@ -28,7 +27,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Optional;
@@ -43,7 +41,6 @@ public class OrderServiceImpl implements OrderService {
     private final MenuItemRepository menuItemRepository;
     private final DiningTableRepository diningTableRepository;
     private final OutletRepository outletRepository;
-    private final DailyCounterRepository dailyCounterRepository;
     private final IdempotencyKeyRepository idempotencyKeyRepository;
     private final ObjectMapper objectMapper;
 
@@ -51,14 +48,12 @@ public class OrderServiceImpl implements OrderService {
                             MenuItemRepository menuItemRepository,
                             DiningTableRepository diningTableRepository,
                             OutletRepository outletRepository,
-                            DailyCounterRepository dailyCounterRepository,
                             IdempotencyKeyRepository idempotencyKeyRepository,
                             ObjectMapper objectMapper) {
         this.orderRepository = orderRepository;
         this.menuItemRepository = menuItemRepository;
         this.diningTableRepository = diningTableRepository;
         this.outletRepository = outletRepository;
-        this.dailyCounterRepository = dailyCounterRepository;
         this.idempotencyKeyRepository = idempotencyKeyRepository;
         this.objectMapper = objectMapper;
     }
@@ -99,7 +94,6 @@ public class OrderServiceImpl implements OrderService {
         // 3. Validate Context (DINE_IN vs TAKE_AWAY)
         String tableNumber = null;
         String customerName = null;
-        Integer queueNumber = null;
 
         if (request.orderType() == OrderType.DINE_IN) {
             if (request.tableNumber() == null || request.tableNumber().isBlank()) {
@@ -112,23 +106,20 @@ public class OrderServiceImpl implements OrderService {
             }
             tableNumber = table.getTableNumber();
         } else {
+            // ALUR_SISTEM.md Line 141: customerName wajib untuk take away
             if (request.customerName() == null || request.customerName().isBlank()) {
                 throw new BadRequestException("customerName is required for TAKE_AWAY orders");
             }
             customerName = request.customerName().trim();
-
-            // Atomically acquire daily queue number with pessimistic lock
-            LocalDate today = LocalDate.now();
-            DailyCounter counter = dailyCounterRepository.findByOutletIdAndCounterDateWithLock(outlet.getId(), today)
-                    .orElseGet(() -> dailyCounterRepository.save(new DailyCounter(outlet.getId(), today)));
-            queueNumber = counter.incrementAndGet();
-            dailyCounterRepository.save(counter);
+            // NOTE: queueNumber is NOT assigned here.
+            // Per ALUR_SISTEM.md Line 144, queue number is only assigned
+            // when status becomes PAID (via PaymentServiceImpl.processWebhook)
+            // to avoid gap numbers from expired/cancelled orders.
         }
 
         // 4. Create Order Aggregate
         Order order = new Order(outlet, request.orderType(), tableNumber, customerName);
         order.setNotes(request.notes());
-        order.setQueueNumber(queueNumber);
 
         // Record initial status history
         order.getStatusHistory().add(new OrderStatusHistory(order, null, OrderStatus.PENDING_PAYMENT, "SYSTEM"));

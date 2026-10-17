@@ -8,4 +8,5 @@ import java.util.List;
 public interface CatalogService {
     List<MenuItemResponse> getActiveMenu(Long outletId);
     TableContextResponse getTableContext(Long outletId, String tableNumber);
+    TableContextResponse getOutletContext(Long outletId);
 }

@@ -49,6 +49,9 @@ class PaymentServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private com.qrorder.ordering.infrastructure.DailyCounterRepository dailyCounterRepository;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -133,5 +136,27 @@ class PaymentServiceTest {
         // Should not transition or publish again
         verify(paymentRepository, never()).save(payment);
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("processWebhook: Assigns queue number to TAKE_AWAY order upon payment settlement")
+    void processWebhookTakeawayAssignsQueueNumber() {
+        Order takeawayOrder = new Order(outlet, OrderType.TAKE_AWAY, null, "Siti");
+        takeawayOrder.addLine(1L, "Mie Pedas", 15_000L, 1, null);
+        takeawayOrder.calculateTotals(1000, 500);
+
+        Payment payment = new Payment(takeawayOrder, PaymentProvider.MIDTRANS, "REF-TAKEAWAY-1", takeawayOrder.getTotal(), null);
+        when(paymentRepository.findByReference("REF-TAKEAWAY-1")).thenReturn(Optional.of(payment));
+
+        com.qrorder.ordering.domain.DailyCounter counter = new com.qrorder.ordering.domain.DailyCounter(outlet.getId(), java.time.LocalDate.now());
+        when(dailyCounterRepository.findByOutletIdAndCounterDateWithLock(eq(outlet.getId()), any(java.time.LocalDate.class)))
+                .thenReturn(Optional.of(counter));
+
+        PaymentWebhookRequest webhookRequest = new PaymentWebhookRequest("REF-TAKEAWAY-1", "settlement", "sig-123");
+        paymentService.processWebhook(webhookRequest);
+
+        assertEquals(OrderStatus.PAID, takeawayOrder.getStatus());
+        assertEquals(1, takeawayOrder.getQueueNumber());
+        verify(dailyCounterRepository, times(1)).save(counter);
     }
 }
