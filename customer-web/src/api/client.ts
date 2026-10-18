@@ -134,6 +134,7 @@ export const api = {
         body: JSON.stringify({
           reference,
           transactionStatus: 'settlement',
+          signatureKey: 'simulated-dev-signature',
           signature: 'simulated-dev-signature',
         }),
       });
