@@ -55,6 +55,12 @@ public class GlobalExceptionHandler {
         return buildProblem(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage(), "bad-request");
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ProblemDetail handleMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        log.warn("Malformed JSON request [traceId={}]: {}", getTraceId(), ex.getMessage());
+        return buildProblem(HttpStatus.BAD_REQUEST, "Malformed JSON Request", "The request body could not be parsed or contains unrecognized fields", "malformed-json");
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new HashMap<>();
