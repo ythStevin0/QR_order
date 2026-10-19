@@ -13,7 +13,7 @@ import java.util.UUID;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
-    @Query("SELECT o FROM Order o WHERE o.outlet.id = :outletId AND o.status IN :statuses ORDER BY o.createdAt ASC")
+    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.lines LEFT JOIN FETCH o.outlet WHERE o.outlet.id = :outletId AND o.status IN :statuses ORDER BY o.createdAt ASC")
     List<Order> findKitchenQueue(
             @Param("outletId") Long outletId,
             @Param("statuses") Collection<OrderStatus> statuses

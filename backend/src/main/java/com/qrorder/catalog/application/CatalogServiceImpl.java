@@ -11,6 +11,7 @@ import com.qrorder.outlet.infrastructure.OutletRepository;
 import com.qrorder.shared.error.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,7 @@ public class CatalogServiceImpl implements CatalogService {
     }
 
     @Override
+    @Cacheable(value = "activeMenu", key = "#outletId")
     public List<MenuItemResponse> getActiveMenu(Long outletId) {
         log.info("Fetching active menu items for outletId={}", outletId);
         ensureOutletExists(outletId);
