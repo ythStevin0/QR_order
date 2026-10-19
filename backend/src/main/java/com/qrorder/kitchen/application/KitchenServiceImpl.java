@@ -180,16 +180,16 @@ public class KitchenServiceImpl implements KitchenService {
     }
 
     private void removeKitchenEmitter(Long outletId, SseEmitter emitter) {
-        List<SseEmitter> list = kitchenEmitters.get(outletId);
-        if (list != null) {
+        kitchenEmitters.computeIfPresent(outletId, (key, list) -> {
             list.remove(emitter);
-        }
+            return list.isEmpty() ? null : list;
+        });
     }
 
     private void removeCustomerEmitter(UUID orderId, SseEmitter emitter) {
-        List<SseEmitter> list = customerEmitters.get(orderId);
-        if (list != null) {
+        customerEmitters.computeIfPresent(orderId, (key, list) -> {
             list.remove(emitter);
-        }
+            return list.isEmpty() ? null : list;
+        });
     }
 }

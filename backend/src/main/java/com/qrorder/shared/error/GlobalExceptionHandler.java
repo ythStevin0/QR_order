@@ -55,6 +55,12 @@ public class GlobalExceptionHandler {
         return buildProblem(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage(), "bad-request");
     }
 
+    @ExceptionHandler(UnauthorizedException.class)
+    public ProblemDetail handleUnauthorized(UnauthorizedException ex) {
+        log.warn("Unauthorized access [traceId={}]: {}", getTraceId(), ex.getMessage());
+        return buildProblem(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage(), "unauthorized");
+    }
+
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     public ProblemDetail handleMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException ex) {
         log.warn("Malformed JSON request [traceId={}]: {}", getTraceId(), ex.getMessage());
