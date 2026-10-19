@@ -1,30 +1,36 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_order_app/main.dart';
+import 'package:qr_order_app/features/kitchen/providers/kitchen_provider.dart';
+
+class TestKitchenNotifier extends KitchenNotifier {
+  @override
+  KitchenState build() {
+    return const KitchenState(isLoading: false);
+  }
+
+  @override
+  void startAutoPolling() {
+    // Disable timer in tests
+  }
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Kitchen App smoke test', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          kitchenProvider.overrideWith(TestKitchenNotifier.new),
+        ],
+        child: const QrOrderKitchenApp(),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.byType(QrOrderKitchenApp), findsOneWidget);
+    expect(find.text('Layar Dapur (KDS)'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Unmount to cleanly dispose
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }
