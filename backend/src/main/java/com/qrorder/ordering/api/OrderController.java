@@ -36,4 +36,14 @@ public class OrderController {
         OrderResponse response = orderService.getOrderById(id);
         return ResponseEntity.ok(WebResponse.success(response));
     }
+
+    @GetMapping
+    public ResponseEntity<WebResponse<com.qrorder.shared.pagination.CursorPageResponse<OrderResponse>>> getOrdersKeyset(
+            @RequestParam Long outletId,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) String cursor
+    ) {
+        com.qrorder.shared.pagination.CursorPageResponse<OrderResponse> page = orderService.getOrdersByOutletKeyset(outletId, limit, cursor);
+        return ResponseEntity.ok(WebResponse.success(page));
+    }
 }

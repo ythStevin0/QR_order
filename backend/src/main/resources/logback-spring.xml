@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Include default Spring Boot converters -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="qr-order-api"/>
+
+    <!-- Standard Console Appender with MDC correlation -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%cyan(%X{traceId:-})|outlet:%yellow(%X{outletId:-})|order:%green(%X{orderId:-})] %magenta(%logger{36}) - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Production JSON Console Appender (for Loki / ELK / CloudWatch) -->
+    <springProfile name="json-logging">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- Default Local Profile -->
+    <springProfile name="!json-logging">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+        <logger name="com.qrorder" level="DEBUG"/>
+        <logger name="org.springframework.security" level="INFO"/>
+        <logger name="org.flywaydb" level="INFO"/>
+        <logger name="com.zaxxer.hikari" level="INFO"/>
+    </springProfile>
+</configuration>

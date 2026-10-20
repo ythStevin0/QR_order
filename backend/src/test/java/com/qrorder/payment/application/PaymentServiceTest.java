@@ -52,6 +52,9 @@ class PaymentServiceTest {
     @Mock
     private com.qrorder.ordering.infrastructure.DailyCounterRepository dailyCounterRepository;
 
+    @Mock
+    private com.qrorder.shared.metrics.OrderMetricsService orderMetricsService;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 

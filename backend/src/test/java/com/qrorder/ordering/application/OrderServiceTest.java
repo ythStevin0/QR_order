@@ -56,6 +56,9 @@ class OrderServiceTest {
     @Mock
     private IdempotencyKeyRepository idempotencyKeyRepository;
 
+    @Mock
+    private com.qrorder.shared.metrics.OrderMetricsService orderMetricsService;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
