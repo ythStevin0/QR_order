@@ -11,9 +11,11 @@ import com.qrorder.payment.api.dto.PaymentResponse;
 import com.qrorder.payment.api.dto.PaymentWebhookRequest;
 import com.qrorder.payment.domain.Payment;
 import com.qrorder.payment.domain.PaymentStatus;
+import com.qrorder.payment.domain.QrisPayment;
 import com.qrorder.payment.infrastructure.PaymentRepository;
 import com.qrorder.shared.error.BadRequestException;
 import com.qrorder.shared.error.ResourceNotFoundException;
+import com.qrorder.shared.metrics.OrderMetricsService;
 import com.qrorder.shared.outbox.OutboxEvent;
 import com.qrorder.shared.outbox.OutboxEventRepository;
 import org.slf4j.Logger;
@@ -39,19 +41,22 @@ public class PaymentServiceImpl implements PaymentService {
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final DailyCounterRepository dailyCounterRepository;
+    private final OrderMetricsService orderMetricsService;
 
     public PaymentServiceImpl(PaymentRepository paymentRepository,
                               OrderRepository orderRepository,
                               OutboxEventRepository outboxEventRepository,
                               ApplicationEventPublisher eventPublisher,
                               ObjectMapper objectMapper,
-                              DailyCounterRepository dailyCounterRepository) {
+                              DailyCounterRepository dailyCounterRepository,
+                              OrderMetricsService orderMetricsService) {
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
         this.dailyCounterRepository = dailyCounterRepository;
+        this.orderMetricsService = orderMetricsService;
     }
 
     @Override
@@ -78,11 +83,21 @@ public class PaymentServiceImpl implements PaymentService {
 
         String reference = "QRIS-" + order.getId().toString().substring(0, 8) + "-" + System.currentTimeMillis();
         Instant expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES);
+        String qrString = generateQrString(reference);
 
-        Payment payment = new Payment(order, request.provider(), reference, order.getTotal(), expiresAt);
+        // Polymorphic QrisPayment entity
+        QrisPayment payment = new QrisPayment(
+                order,
+                request.provider(),
+                reference,
+                order.getTotal(),
+                expiresAt,
+                qrString,
+                "https://simulator.midtrans.com/qris/" + reference,
+                "ID1020000000000"
+        );
         Payment savedPayment = paymentRepository.save(payment);
 
-        String qrString = generateQrString(reference);
         log.info("QRIS generated successfully [orderId={}, reference={}, amount={}]", orderId, reference, order.getTotal());
 
         return PaymentResponse.from(savedPayment, qrString);
@@ -109,6 +124,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (status.equals("settlement") || status.equals("capture") || status.equals("paid")) {
             payment.markPaid("{\"rawStatus\":\"" + status + "\"}");
             order.transitionTo(OrderStatus.PAID, "SYSTEM_WEBHOOK");
+            orderMetricsService.recordOrderPaid(order.getOutlet().getId());
 
             // Assign queue number for TAKE_AWAY orders upon payment (ALUR_SISTEM.md Line 144)
             if (order.getOrderType() == OrderType.TAKE_AWAY && order.getQueueNumber() == null) {

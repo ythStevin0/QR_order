@@ -23,7 +23,10 @@ import java.util.UUID;
 public class CorrelationFilter extends OncePerRequestFilter {
 
     public static final String TRACE_ID_MDC_KEY = "traceId";
+    public static final String OUTLET_ID_MDC_KEY = "outletId";
+    public static final String ORDER_ID_MDC_KEY = "orderId";
     public static final String REQUEST_ID_HEADER = "X-Request-Id";
+    public static final String OUTLET_ID_HEADER = "X-Outlet-Id";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -35,10 +38,31 @@ public class CorrelationFilter extends OncePerRequestFilter {
         MDC.put(TRACE_ID_MDC_KEY, traceId);
         response.setHeader(REQUEST_ID_HEADER, traceId);
 
+        // Check if outletId is provided in header or param
+        String outletId = request.getHeader(OUTLET_ID_HEADER);
+        if (outletId == null || outletId.isBlank()) {
+            outletId = request.getParameter("outletId");
+        }
+        if (outletId != null && !outletId.isBlank()) {
+            MDC.put(OUTLET_ID_MDC_KEY, outletId);
+        }
+
         try {
             filterChain.doFilter(request, response);
         } finally {
             MDC.clear();
+        }
+    }
+
+    public static void setOutletId(Long outletId) {
+        if (outletId != null) {
+            MDC.put(OUTLET_ID_MDC_KEY, String.valueOf(outletId));
+        }
+    }
+
+    public static void setOrderId(UUID orderId) {
+        if (orderId != null) {
+            MDC.put(ORDER_ID_MDC_KEY, orderId.toString());
         }
     }
 }

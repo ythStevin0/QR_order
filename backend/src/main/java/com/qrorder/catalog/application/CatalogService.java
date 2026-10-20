@@ -9,4 +9,5 @@ public interface CatalogService {
     List<MenuItemResponse> getActiveMenu(Long outletId);
     TableContextResponse getTableContext(Long outletId, String tableNumber);
     TableContextResponse getOutletContext(Long outletId);
+    void evictActiveMenuCache(Long outletId);
 }

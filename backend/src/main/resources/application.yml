@@ -12,6 +12,10 @@ spring:
         jdbc:
           time_zone: UTC
         format_sql: false
+      jakarta:
+        persistence:
+          query:
+            timeout: 5000 # 5s Query Timeout (Topik 13)
 
   # Flyway
   flyway:
@@ -19,7 +23,7 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
-  # PostgreSQL datasource
+  # PostgreSQL datasource with HikariCP connection pool guards (Topik 27 & 38)
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:qrorder}
     username: ${DB_USER:qrorder}
@@ -27,6 +31,17 @@ spring:
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:10}
       minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 2000 # Warn on connections held > 2000ms
+
+  # Redis Configuration (Topik 1, 2, 21, 40)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
 
   # Virtual threads (Java 21)
   threads:
@@ -40,22 +55,30 @@ spring:
     deserialization:
       fail-on-unknown-properties: true
 
-# Security — JWT
+# Security — JWT (Topik 14, 24, 29)
 app:
   jwt:
     secret: ${JWT_SECRET:change-me-in-production-this-is-only-for-dev}
     expiration-ms: ${JWT_EXPIRATION:3600000}   # 1 hour
     refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION:86400000}  # 24 hours
 
-# Actuator
+# Actuator & Observability (Topik 19, 20, 22, 23)
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 # Server
 server:
@@ -64,10 +87,10 @@ server:
     include-message: always
     include-binding-errors: always
 
-# Logging
+# Logging with MDC Context (Topik 19, 20)
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}|outlet:%X{outletId:-}|order:%X{orderId:-}] %logger{36} - %msg%n"
   level:
     com.qrorder: DEBUG
     org.springframework.security: INFO

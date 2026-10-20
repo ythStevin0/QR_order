@@ -65,6 +65,12 @@ public class CatalogServiceImpl implements CatalogService {
         return TableContextResponse.from(outlet, null);
     }
 
+    @Override
+    @org.springframework.cache.annotation.CacheEvict(value = "activeMenu", key = "#outletId")
+    public void evictActiveMenuCache(Long outletId) {
+        log.info("Evicting active menu cache for outletId={}", outletId);
+    }
+
     private Outlet ensureOutletExists(Long outletId) {
         return outletRepository.findById(outletId)
                 .orElseThrow(() -> new ResourceNotFoundException("Outlet not found with id: " + outletId));

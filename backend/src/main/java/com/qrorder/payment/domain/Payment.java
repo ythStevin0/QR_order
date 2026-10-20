@@ -12,6 +12,8 @@ import java.time.Instant;
  */
 @Entity
 @Table(name = "payment")
+@Inheritance(strategy = InheritanceType.JOINED)
+@DiscriminatorColumn(name = "payment_type", discriminatorType = DiscriminatorType.STRING)
 public class Payment {
 
     @Id

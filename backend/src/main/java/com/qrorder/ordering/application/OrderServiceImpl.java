@@ -27,8 +27,15 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import com.qrorder.shared.logging.CorrelationFilter;
+import com.qrorder.shared.metrics.OrderMetricsService;
+import com.qrorder.shared.pagination.CursorPageResponse;
+import com.qrorder.shared.pagination.CursorUtils;
+import org.springframework.data.domain.PageRequest;
+
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,19 +50,22 @@ public class OrderServiceImpl implements OrderService {
     private final OutletRepository outletRepository;
     private final IdempotencyKeyRepository idempotencyKeyRepository;
     private final ObjectMapper objectMapper;
+    private final OrderMetricsService orderMetricsService;
 
     public OrderServiceImpl(OrderRepository orderRepository,
                             MenuItemRepository menuItemRepository,
                             DiningTableRepository diningTableRepository,
                             OutletRepository outletRepository,
                             IdempotencyKeyRepository idempotencyKeyRepository,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            OrderMetricsService orderMetricsService) {
         this.orderRepository = orderRepository;
         this.menuItemRepository = menuItemRepository;
         this.diningTableRepository = diningTableRepository;
         this.outletRepository = outletRepository;
         this.idempotencyKeyRepository = idempotencyKeyRepository;
         this.objectMapper = objectMapper;
+        this.orderMetricsService = orderMetricsService;
     }
 
     @Override
@@ -143,6 +153,10 @@ public class OrderServiceImpl implements OrderService {
         order.calculateTotals(outlet.getTaxRate(), outlet.getServiceChargeRate());
 
         Order savedOrder = orderRepository.save(order);
+        CorrelationFilter.setOrderId(savedOrder.getId());
+        CorrelationFilter.setOutletId(outlet.getId());
+        orderMetricsService.recordOrderCreated(outlet.getId(), savedOrder.getOrderType().name());
+
         log.info("Order created successfully [id={}, outletId={}, type={}, total={}]",
                 savedOrder.getId(), outlet.getId(), savedOrder.getOrderType(), savedOrder.getTotal());
 
@@ -170,6 +184,34 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
         return OrderResponse.from(order);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPageResponse<OrderResponse> getOrdersByOutletKeyset(Long outletId, int limit, String cursor) {
+        int effectiveLimit = Math.min(Math.max(limit, 1), 100);
+        // Fetch effectiveLimit + 1 to check if another page exists without a costly COUNT(*) query
+        PageRequest pageRequest = PageRequest.of(0, effectiveLimit + 1);
+
+        CursorUtils.OrderCursor decodedCursor = CursorUtils.decode(cursor);
+        List<Order> orders;
+        if (decodedCursor != null) {
+            orders = orderRepository.findNextKeysetPage(outletId, decodedCursor.createdAt(), decodedCursor.id(), pageRequest);
+        } else {
+            orders = orderRepository.findFirstKeysetPage(outletId, pageRequest);
+        }
+
+        boolean hasMore = orders.size() > effectiveLimit;
+        List<Order> pagedData = hasMore ? orders.subList(0, effectiveLimit) : orders;
+
+        String nextCursor = null;
+        if (!pagedData.isEmpty() && hasMore) {
+            Order last = pagedData.get(pagedData.size() - 1);
+            nextCursor = CursorUtils.encode(last.getCreatedAt(), last.getId());
+        }
+
+        List<OrderResponse> responses = pagedData.stream().map(OrderResponse::from).toList();
+        return CursorPageResponse.of(responses, nextCursor, hasMore, effectiveLimit);
     }
 
     private String computeHash(CreateOrderRequest request) {

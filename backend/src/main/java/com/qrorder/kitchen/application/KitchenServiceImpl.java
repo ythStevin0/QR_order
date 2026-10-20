@@ -31,13 +31,17 @@ public class KitchenServiceImpl implements KitchenService {
 
     private final OrderRepository orderRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.qrorder.shared.metrics.OrderMetricsService orderMetricsService;
 
     private final Map<Long, CopyOnWriteArrayList<SseEmitter>> kitchenEmitters = new ConcurrentHashMap<>();
     private final Map<UUID, CopyOnWriteArrayList<SseEmitter>> customerEmitters = new ConcurrentHashMap<>();
 
-    public KitchenServiceImpl(OrderRepository orderRepository, ApplicationEventPublisher eventPublisher) {
+    public KitchenServiceImpl(OrderRepository orderRepository,
+                              ApplicationEventPublisher eventPublisher,
+                              com.qrorder.shared.metrics.OrderMetricsService orderMetricsService) {
         this.orderRepository = orderRepository;
         this.eventPublisher = eventPublisher;
+        this.orderMetricsService = orderMetricsService;
     }
 
     @Override
@@ -62,6 +66,14 @@ public class KitchenServiceImpl implements KitchenService {
         OrderStatus oldStatus = order.getStatus();
         order.transitionTo(newStatus, changedBy);
         Order savedOrder = orderRepository.save(order);
+
+        // Record metrics for kitchen SLA
+        if (newStatus == OrderStatus.READY && savedOrder.getCreatedAt() != null) {
+            orderMetricsService.recordCookDuration(savedOrder.getOutlet().getId(),
+                    java.time.Duration.between(savedOrder.getCreatedAt(), java.time.Instant.now()));
+        } else if (newStatus == OrderStatus.COMPLETED) {
+            orderMetricsService.recordOrderCompleted(savedOrder.getOutlet().getId());
+        }
 
         // Publish event for SSE broadcast
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
