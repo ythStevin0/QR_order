@@ -31,4 +31,8 @@ public record PaymentResponse(
                 payment.getPaidAt()
         );
     }
+
+    public static PaymentResponse from(Payment payment) {
+        return from(payment, null);
+    }
 }

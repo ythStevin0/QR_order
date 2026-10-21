@@ -162,4 +162,46 @@ class PaymentServiceTest {
         assertEquals(1, takeawayOrder.getQueueNumber());
         verify(dailyCounterRepository, times(1)).save(counter);
     }
+
+    @Test
+    @DisplayName("payWithCash: successfully processes cash and calculates change")
+    void payWithCashSuccess() {
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(paymentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.qrorder.payment.api.dto.PayCashRequest request = new com.qrorder.payment.api.dto.PayCashRequest(10L, 50_000L);
+        PaymentResponse response = paymentService.payWithCash(order.getId(), request);
+
+        assertNotNull(response);
+        assertEquals(OrderStatus.PAID, order.getStatus());
+        assertEquals(order.getTotal(), response.amount());
+        verify(paymentRepository, times(1)).save(any(com.qrorder.payment.domain.CashPayment.class));
+        verify(eventPublisher, times(1)).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("payWithCash: throws BadRequestException when tendered amount is insufficient")
+    void payWithCashInsufficientThrowsException() {
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+
+        com.qrorder.payment.api.dto.PayCashRequest request = new com.qrorder.payment.api.dto.PayCashRequest(10L, 20_000L);
+        assertThrows(BadRequestException.class, () -> paymentService.payWithCash(order.getId(), request));
+    }
+
+    @Test
+    @DisplayName("payWithEdc: successfully processes EDC card payment")
+    void payWithEdcSuccess() {
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(paymentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.qrorder.payment.api.dto.PayEdcRequest request = new com.qrorder.payment.api.dto.PayEdcRequest(
+                "BCA", "APPR-1234", "5210-XXXX-XXXX-1234", "DEBIT"
+        );
+        PaymentResponse response = paymentService.payWithEdc(order.getId(), request);
+
+        assertNotNull(response);
+        assertEquals(OrderStatus.PAID, order.getStatus());
+        verify(paymentRepository, times(1)).save(any(com.qrorder.payment.domain.EdcCardPayment.class));
+        verify(eventPublisher, times(1)).publishEvent(any(Object.class));
+    }
 }
