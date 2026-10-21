@@ -37,4 +37,22 @@ public class PaymentController {
         paymentService.processWebhook(request);
         return ResponseEntity.ok(WebResponse.success("Webhook processed successfully"));
     }
+
+    @PostMapping("/orders/{orderId}/payment/cash")
+    public ResponseEntity<WebResponse<PaymentResponse>> payWithCash(
+            @PathVariable UUID orderId,
+            @RequestBody @Valid com.qrorder.payment.api.dto.PayCashRequest request
+    ) {
+        PaymentResponse response = paymentService.payWithCash(orderId, request);
+        return ResponseEntity.ok(WebResponse.success(response, "Cash payment completed successfully"));
+    }
+
+    @PostMapping("/orders/{orderId}/payment/edc")
+    public ResponseEntity<WebResponse<PaymentResponse>> payWithEdc(
+            @PathVariable UUID orderId,
+            @RequestBody @Valid com.qrorder.payment.api.dto.PayEdcRequest request
+    ) {
+        PaymentResponse response = paymentService.payWithEdc(orderId, request);
+        return ResponseEntity.ok(WebResponse.success(response, "EDC payment completed successfully"));
+    }
 }
