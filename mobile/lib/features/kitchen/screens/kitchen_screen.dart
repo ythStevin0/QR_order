@@ -45,11 +45,11 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              ApiClient().updateBaseUrl(controller.text.trim());
-              ref.read(kitchenProvider.notifier).loadOrders();
+              final nextUrl = controller.text.trim();
+              ref.read(kitchenProvider.notifier).updateBaseUrl(nextUrl);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Base URL diubah ke: ${controller.text.trim()}')),
+                SnackBar(content: Text('Base URL diubah ke: $nextUrl')),
               );
             },
             child: const Text('Simpan'),
@@ -64,6 +64,18 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     final state = ref.watch(kitchenProvider);
     final notifier = ref.read(kitchenProvider.notifier);
 
+    ref.listen<KitchenState>(kitchenProvider, (prev, next) {
+      if (next.actionError != null && next.actionError != prev?.actionError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.actionError!),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+        notifier.clearActionError();
+      }
+    });
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F4),
       appBar: AppBar(
@@ -75,8 +87,8 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.green,
+                  decoration: BoxDecoration(
+                    color: state.isOffline ? Colors.red : Colors.green,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -88,8 +100,13 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
               ],
             ),
             Text(
-              'Outlet Utama • Auto-Sync Aktif',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              state.isOffline
+                  ? 'Outlet Utama • Terputus dari Server'
+                  : 'Outlet Utama • Terhubung (Auto-Sync)',
+              style: TextStyle(
+                fontSize: 11,
+                color: state.isOffline ? Colors.red.shade700 : Colors.grey.shade600,
+              ),
             ),
           ],
         ),
@@ -147,20 +164,48 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                 const SizedBox(width: 8),
                 _buildFilterChip(
                   label: 'Siap Saji',
-                  count: state.countByStatus('READY_FOR_PICKUP'),
-                  filterKey: 'READY_FOR_PICKUP',
+                  count: state.countByStatus('READY'),
+                  filterKey: 'READY',
                   color: AppTheme.statusReady,
-                  isActive: state.activeFilter == 'READY_FOR_PICKUP',
-                  onTap: () => notifier.setFilter('READY_FOR_PICKUP'),
+                  isActive: state.activeFilter == 'READY',
+                  onTap: () => notifier.setFilter('READY'),
                 ),
               ],
             ),
           ),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: () => notifier.loadOrders(),
-        child: _buildBody(state, notifier),
+      body: Column(
+        children: [
+          if (state.isOffline && state.orders.isNotEmpty)
+            Container(
+              width: double.infinity,
+              color: Colors.red.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.wifi_off, size: 16, color: Colors.red.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Koneksi ke server terputus — mencoba menyambung ulang secara otomatis...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => notifier.loadOrders(),
+              child: _buildBody(state, notifier),
+            ),
+          ),
+        ],
       ),
     );
   }

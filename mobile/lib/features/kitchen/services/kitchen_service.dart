@@ -5,7 +5,18 @@ import '../models/kitchen_order.dart';
 class KitchenService {
   final Dio _dio = ApiClient().dio;
 
-  /// Fetch all active kitchen orders (status PAID, PREPARING, READY_FOR_PICKUP)
+  String _extractErrorMessage(DioException e) {
+    final data = e.response?.data;
+    if (data is Map) {
+      final detail = data['detail'] ?? data['message'];
+      if (detail != null && detail.toString().trim().isNotEmpty) {
+        return detail.toString();
+      }
+    }
+    return e.message ?? 'Kesalahan jaringan';
+  }
+
+  /// Fetch all active kitchen orders (status PAID, PREPARING, READY)
   Future<List<KitchenOrder>> getActiveKitchenOrders(int outletId) async {
     try {
       final response = await _dio.get(
@@ -19,11 +30,11 @@ class KitchenService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Gagal memuat pesanan dapur: ${e.message}');
+      throw Exception('Gagal memuat pesanan dapur: ${_extractErrorMessage(e)}');
     }
   }
 
-  /// Update order status (e.g. PAID -> PREPARING, PREPARING -> READY_FOR_PICKUP)
+  /// Update order status (e.g. PAID -> PREPARING, PREPARING -> READY)
   Future<KitchenOrder> updateOrderStatus({
     required String orderId,
     required String status,
@@ -43,7 +54,7 @@ class KitchenService {
       }
       throw Exception('Gagal memperbarui status pesanan');
     } on DioException catch (e) {
-      throw Exception('Error update status: ${e.message}');
+      throw Exception('Error update status: ${_extractErrorMessage(e)}');
     }
   }
 }

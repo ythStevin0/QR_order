@@ -8,6 +8,7 @@ import com.qrorder.ordering.domain.event.OrderPaidEvent;
 import com.qrorder.ordering.domain.event.OrderStatusChangedEvent;
 import com.qrorder.ordering.infrastructure.OrderRepository;
 import com.qrorder.outlet.domain.Outlet;
+import com.qrorder.shared.metrics.OrderMetricsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,6 +37,9 @@ class KitchenServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private OrderMetricsService orderMetricsService;
+
     @InjectMocks
     private KitchenServiceImpl kitchenService;
 
@@ -47,6 +52,7 @@ class KitchenServiceTest {
         outlet.setId(1L);
 
         order = new Order(outlet, OrderType.DINE_IN, "05", null);
+        org.springframework.test.util.ReflectionTestUtils.setField(order, "createdAt", java.time.Instant.now().minusSeconds(60));
         order.addLine(1L, "Mie Gacoan", 15_000L, 1, null);
         order.calculateTotals(1000, 500);
         order.transitionTo(OrderStatus.PAID, "SYSTEM");
@@ -88,6 +94,35 @@ class KitchenServiceTest {
 
         verify(orderRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus: Transitions PREPARING to READY and records cook duration metric")
+    void updateOrderStatusPreparingToReadyRecordsMetric() {
+        order.transitionTo(OrderStatus.PREPARING, "chef_andi");
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse response = kitchenService.updateOrderStatus(order.getId(), OrderStatus.READY, "chef_andi");
+
+        assertEquals(OrderStatus.READY, response.status());
+        verify(orderMetricsService, times(1)).recordCookDuration(eq(1L), any(Duration.class));
+        verify(eventPublisher, times(1)).publishEvent(any(OrderStatusChangedEvent.class));
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus: Transitions READY to COMPLETED and records completed metric")
+    void updateOrderStatusReadyToCompletedRecordsMetric() {
+        order.transitionTo(OrderStatus.PREPARING, "chef_andi");
+        order.transitionTo(OrderStatus.READY, "chef_andi");
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse response = kitchenService.updateOrderStatus(order.getId(), OrderStatus.COMPLETED, "chef_andi");
+
+        assertEquals(OrderStatus.COMPLETED, response.status());
+        verify(orderMetricsService, times(1)).recordOrderCompleted(1L);
+        verify(eventPublisher, times(1)).publishEvent(any(OrderStatusChangedEvent.class));
     }
 
     @Test

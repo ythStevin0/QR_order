@@ -54,7 +54,8 @@ export interface OrderLineResponse {
   id: number;
   menuItemId: number;
   itemName: string;
-  price: number;
+  unitPrice?: number;
+  price?: number;
   quantity: number;
   subtotal: number;
   notes?: string | null;
