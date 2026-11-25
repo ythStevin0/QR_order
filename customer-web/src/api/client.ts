@@ -20,7 +20,20 @@ export function setUsingMock(value: boolean): void {
   isMockMode = value;
 }
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+class ApiHttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiHttpError';
+    this.status = status;
+  }
+}
+
+async function fetchJson<T>(
+  url: string,
+  options?: RequestInit,
+  allowMockOn5xx = false
+): Promise<T> {
   if (isMockMode) {
     throw new Error('FORCE_MOCK');
   }
@@ -47,14 +60,25 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
       } catch {
         // fallback
       }
-      throw new Error(errorMsg);
+      throw new ApiHttpError(response.status, errorMsg);
     }
 
     const result: WebResponse<T> = await response.json();
     return result.data;
   } catch (err: any) {
-    // If backend is down (Vite returns 500 on proxy ECONNREFUSED or network failure)
-    console.warn(`[API] Backend error (${err.message}). Activating Demo/Mock Mode.`);
+    if (err instanceof ApiHttpError) {
+      if (err.status >= 400 && err.status < 500) {
+        throw err;
+      }
+      if (allowMockOn5xx && err.status >= 500) {
+        console.warn(`[API] Backend unavailable (${err.message}). Activating Demo/Mock Mode.`);
+        isMockMode = true;
+      }
+      throw err;
+    }
+
+    // Network failure / ECONNREFUSED
+    console.warn(`[API] Network error (${err.message}). Activating Demo/Mock Mode.`);
     isMockMode = true;
     throw err;
   }
@@ -64,26 +88,33 @@ export const api = {
   // 1. Context APIs
   async getOutletContext(outletId: number): Promise<TableContext> {
     try {
-      return await fetchJson<TableContext>(`${BASE_URL}/outlets/${outletId}`);
-    } catch {
-      return mockApi.getOutletContext(outletId);
+      return await fetchJson<TableContext>(`${BASE_URL}/outlets/${outletId}`, undefined, true);
+    } catch (err) {
+      if (isMockMode) return mockApi.getOutletContext(outletId);
+      throw err;
     }
   },
 
   async getTableContext(outletId: number, tableNumber: string): Promise<TableContext> {
     try {
-      return await fetchJson<TableContext>(`${BASE_URL}/outlets/${outletId}/tables/${encodeURIComponent(tableNumber)}`);
-    } catch {
-      return mockApi.getTableContext(outletId, tableNumber);
+      return await fetchJson<TableContext>(
+        `${BASE_URL}/outlets/${outletId}/tables/${encodeURIComponent(tableNumber)}`,
+        undefined,
+        true
+      );
+    } catch (err) {
+      if (isMockMode) return mockApi.getTableContext(outletId, tableNumber);
+      throw err;
     }
   },
 
   // 2. Menu Catalog
   async getActiveMenu(outletId: number): Promise<MenuItem[]> {
     try {
-      return await fetchJson<MenuItem[]>(`${BASE_URL}/outlets/${outletId}/menu`);
-    } catch {
-      return mockApi.getActiveMenu(outletId);
+      return await fetchJson<MenuItem[]>(`${BASE_URL}/outlets/${outletId}/menu`, undefined, true);
+    } catch (err) {
+      if (isMockMode) return mockApi.getActiveMenu(outletId);
+      throw err;
     }
   },
 
@@ -95,16 +126,18 @@ export const api = {
         headers: { 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify(request),
       });
-    } catch {
-      return mockApi.createOrder(request);
+    } catch (err) {
+      if (isMockMode) return mockApi.createOrder(request);
+      throw err;
     }
   },
 
   async getOrderById(orderId: string): Promise<OrderResponse> {
     try {
       return await fetchJson<OrderResponse>(`${BASE_URL}/orders/${orderId}`);
-    } catch {
-      return mockApi.getOrderById(orderId);
+    } catch (err) {
+      if (isMockMode) return mockApi.getOrderById(orderId);
+      throw err;
     }
   },
 
@@ -115,8 +148,9 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ provider }),
       });
-    } catch {
-      return mockApi.createPayment(orderId);
+    } catch (err) {
+      if (isMockMode) return mockApi.createPayment(orderId);
+      throw err;
     }
   },
 
@@ -135,15 +169,18 @@ export const api = {
           reference,
           transactionStatus: 'settlement',
           signatureKey: 'simulated-dev-signature',
-          signature: 'simulated-dev-signature',
         }),
       });
 
       if (!response.ok) {
-        mockApi.simulatePaymentWebhook(reference);
+        throw new ApiHttpError(response.status, `Webhook failed (${response.status})`);
       }
-    } catch {
-      mockApi.simulatePaymentWebhook(reference);
+    } catch (err) {
+      if (isMockMode) {
+        mockApi.simulatePaymentWebhook(reference);
+        return;
+      }
+      throw err;
     }
   },
 
@@ -157,28 +194,41 @@ export const api = {
       return mockApi.subscribeOrderStatus(orderId, onStatusUpdate);
     }
 
+    let fallbackUnsubscribe: (() => void) | null = null;
     try {
       const sseUrl = `${BASE_URL}/orders/${orderId}/stream`;
       const eventSource = new EventSource(sseUrl);
 
-      eventSource.addEventListener('status', (event: MessageEvent) => {
+      const handleSsePayload = (event: MessageEvent) => {
         try {
-          const orderData = JSON.parse(event.data) as OrderResponse;
-          onStatusUpdate(orderData);
+          const payload = JSON.parse(event.data);
+          if (payload && Array.isArray(payload.items)) {
+            onStatusUpdate(payload as OrderResponse);
+          } else {
+            // Backend KitchenServiceImpl sends { orderId, status } on STATUS_CHANGE
+            api.getOrderById(orderId)
+              .then(onStatusUpdate)
+              .catch((err) => console.error('Failed to refresh order after SSE event', err));
+          }
         } catch (err) {
           console.error('Failed to parse SSE order event payload', err);
         }
-      });
+      };
+
+      eventSource.addEventListener('STATUS_CHANGE', handleSsePayload);
+      eventSource.addEventListener('status', handleSsePayload);
 
       eventSource.onerror = (err) => {
-        console.warn('[SSE] Backend SSE failed, falling back to mock stream');
-        eventSource.close();
+        console.warn('[SSE] Backend SSE error', err);
         if (onError) onError(err);
-        return mockApi.subscribeOrderStatus(orderId, onStatusUpdate);
+        if (eventSource.readyState === EventSource.CLOSED && isMockMode) {
+          fallbackUnsubscribe = mockApi.subscribeOrderStatus(orderId, onStatusUpdate);
+        }
       };
 
       return () => {
         eventSource.close();
+        if (fallbackUnsubscribe) fallbackUnsubscribe();
       };
     } catch {
       return mockApi.subscribeOrderStatus(orderId, onStatusUpdate);

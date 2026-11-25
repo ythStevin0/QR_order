@@ -67,10 +67,18 @@ public class KitchenServiceImpl implements KitchenService {
         order.transitionTo(newStatus, changedBy);
         Order savedOrder = orderRepository.save(order);
 
-        // Record metrics for kitchen SLA
-        if (newStatus == OrderStatus.READY && savedOrder.getCreatedAt() != null) {
-            orderMetricsService.recordCookDuration(savedOrder.getOutlet().getId(),
-                    java.time.Duration.between(savedOrder.getCreatedAt(), java.time.Instant.now()));
+        // Record metrics for kitchen SLA (PAID -> READY)
+        if (newStatus == OrderStatus.READY) {
+            java.time.Instant paidAt = savedOrder.getStatusHistory().stream()
+                    .filter(h -> h.getToStatus() == OrderStatus.PAID)
+                    .map(com.qrorder.ordering.domain.OrderStatusHistory::getChangedAt)
+                    .filter(java.util.Objects::nonNull)
+                    .reduce((first, second) -> second)
+                    .orElse(savedOrder.getCreatedAt());
+            if (paidAt != null) {
+                orderMetricsService.recordCookDuration(savedOrder.getOutlet().getId(),
+                        java.time.Duration.between(paidAt, java.time.Instant.now()));
+            }
         } else if (newStatus == OrderStatus.COMPLETED) {
             orderMetricsService.recordOrderCompleted(savedOrder.getOutlet().getId());
         }

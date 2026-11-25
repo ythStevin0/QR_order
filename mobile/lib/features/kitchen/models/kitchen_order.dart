@@ -41,7 +41,7 @@ class KitchenOrder {
   final int taxAmount;
   final int serviceCharge;
   final int total;
-  final String status; // PAID, PREPARING, READY_FOR_PICKUP, COMPLETED, CANCELLED
+  final String status; // PAID, PREPARING, READY, COMPLETED, CANCELLED
   final String? notes;
   final int version;
   final DateTime createdAt;
@@ -70,6 +70,10 @@ class KitchenOrder {
     List<KitchenOrderItem> itemsList =
         rawItems.map((i) => KitchenOrderItem.fromJson(i as Map<String, dynamic>)).toList();
 
+    final rawStatus = json['status'] as String?;
+    final normalizedStatus =
+        rawStatus == 'READY_FOR_PICKUP' ? 'READY' : (rawStatus ?? 'PAID');
+
     return KitchenOrder(
       id: json['id'] as String? ?? '',
       outletId: json['outletId'] as int? ?? 1,
@@ -81,11 +85,12 @@ class KitchenOrder {
       taxAmount: json['taxAmount'] as int? ?? 0,
       serviceCharge: json['serviceCharge'] as int? ?? 0,
       total: json['total'] as int? ?? 0,
-      status: json['status'] as String? ?? 'PAID',
+      status: normalizedStatus,
       notes: json['notes'] as String?,
       version: json['version'] as int? ?? 1,
       createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
+          ? DateTime.tryParse(json['createdAt'] as String)?.toLocal() ??
+              DateTime.now()
           : DateTime.now(),
       items: itemsList,
     );
@@ -93,6 +98,9 @@ class KitchenOrder {
 
   bool get isDineIn => orderType == 'DINE_IN';
   bool get isTakeAway => orderType == 'TAKE_AWAY';
+  bool get isLate =>
+      (status == 'PAID' || status == 'PREPARING') &&
+      DateTime.now().difference(createdAt).inMinutes >= 15;
 
   String get displayDestination {
     if (isDineIn) {

@@ -1,0 +1,13 @@
+{
+  "name": "qr-order-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "serve:flutter": "node script-serve-flutter.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}

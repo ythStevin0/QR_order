@@ -9,8 +9,8 @@ interface CartDrawerProps {
   cart: CartItem[];
   context: TableContext | null;
   orderType: OrderType;
-  onUpdateQuantity: (menuItemId: number, delta: number) => void;
-  onRemoveItem: (menuItemId: number) => void;
+  onUpdateQuantity: (menuItemId: number, delta: number, notes?: string) => void;
+  onRemoveItem: (menuItemId: number, notes?: string) => void;
   onSubmitOrder: (customerName: string, notes: string) => Promise<void>;
   isSubmitting: boolean;
   submitError?: string | null;
@@ -84,9 +84,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <p className="text-xs mt-1">Silakan pilih menu favorit Anda di katalog</p>
             </div>
           ) : (
-            cart.map((item) => (
+            cart.map((item, idx) => (
               <div
-                key={item.menuItem.id}
+                key={`${item.menuItem.id}-${item.notes ?? ''}-${idx}`}
                 className="p-3 bg-stone-50 rounded-2xl border border-stone-200/80 flex items-start justify-between gap-3"
               >
                 <div className="flex-1 min-w-0">
@@ -106,7 +106,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-xl px-1.5 py-0.5 shadow-2xs">
                     <button
-                      onClick={() => onUpdateQuantity(item.menuItem.id, -1)}
+                      onClick={() => onUpdateQuantity(item.menuItem.id, -1, item.notes ?? '')}
                       className="w-6 h-6 rounded-lg text-stone-600 flex items-center justify-center font-bold text-xs hover:bg-stone-100 cursor-pointer active:scale-90 transition"
                     >
                       <Minus className="w-3.5 h-3.5" />
@@ -115,7 +115,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       {item.quantity}
                     </span>
                     <button
-                      onClick={() => onUpdateQuantity(item.menuItem.id, 1)}
+                      onClick={() => onUpdateQuantity(item.menuItem.id, 1, item.notes ?? '')}
                       className="w-6 h-6 rounded-lg bg-orange-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs hover:bg-orange-700 cursor-pointer active:scale-90 transition"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -123,7 +123,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </div>
 
                   <button
-                    onClick={() => onRemoveItem(item.menuItem.id)}
+                    onClick={() => onRemoveItem(item.menuItem.id, item.notes ?? '')}
                     className="w-7 h-7 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center cursor-pointer transition"
                     title="Hapus menu"
                   >
